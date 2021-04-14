@@ -1,0 +1,1 @@
+This project is focused on analysing association rules in a grocery basket dataset found on [Kaggle](https://www.kaggle.com/heeraldedhia/groceries-dataset). Primarily it focuses on beer products.

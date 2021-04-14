@@ -1,0 +1,212 @@
+---
+title: "Association rules for beer products"
+author: "Grzegorz Chadysz"
+date: "01.03.2020"
+output:
+  html_document:
+    theme: spacelab
+    toc: yes
+    toc_float: yes
+  pdf_document:
+    toc: yes
+  toc_collapsed: yes
+toc_depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+***
+
+# Introduction
+
+This paper will be focused on analysing association rules in a grocery basket dataset found on [Kaggle](https://www.kaggle.com/heeraldedhia/groceries-dataset). Association rules are used to found certain dependencies throught the set, i.e. "if a person buys bread, he is likely to a certain extent to buy butter and milk". Finding association rules and further using them by the sales departments of companies is an important factor in the increase of revenues. Shu-hsien Liao and Hsiao-ko Chang found out that proper use of recommendation systems based on association rules proves beneficial as it actually increases the number of customers and quantities of products they buy. You can find the whole article [here](https://www.sciencedirect.com/science/article/pii/S0306457316301224). Finding the association rules in this paper will be used with the help of packages, which are listed below.
+
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(arules)
+library(arulesViz)
+library(psych)
+library(stringr)
+library(kableExtra)
+library(plotly)
+```
+
+Having 169 unique products we would like to find rules for one or two of them, because analysing rules for each and every would take too much time and probably strip this paper of any concrete insight. So, my product of choice for which association rules I will be looking is beer. We could learn some interesting insight from this, as for example, whether people tend to buy only beer, or with some snacks for parties, or maybe they treat it like water and juice and buy it with regular groceries.
+
+***
+
+# Dataset
+
+The dataset contains 9835 transactions by customers shopping for groceries. The data contains 169 unique items. The set contained a variable describing the number of bought products as first  column. I deleted it since it was treated as an item in the basket. Below you can see the preview of the dataset. Showing all the transactions via *inspect* function would be problematic since there are almost 10 thousand of them.
+
+```{r, echo=FALSE, results='hide', message=FALSE}
+setwd("C:\\Users\\Grzesiek\\Desktop\\Data Science\\Unsupervised Learning\\Third Paper")
+
+```
+```{r, warning=FALSE}
+groceries <-
+  read.transactions(
+    "groceries.csv",
+    format = "basket",
+    sep = ",",
+    skip = 0,
+    header = TRUE
+  )
+groceries
+LIST(head(groceries))
+```
+
+Since there are too many transactions to get a good overview by listing them, we can make use of descriptive statistics, which will more or less tell us the distribution of the number of items in each transaction.
+
+```{r, warning=FALSE}
+describe(size(groceries))
+hist(size(groceries), breaks = 16)
+```
+
+We can see that, on average, people bought between 4 to 5 products during one transaction. However, mean is very prone to outliers, thus the median seems like a better option to consider the "average" amount of products. We can also see that there maximum number of products bought is 32 and from the histogram we can observe that the biggest fraction of transactions were 1-product ones. The parameter break decides into how many bins the histogram is split. So in this case having break=16 means that each bin "contains" two products. First bin corresponds to frequency of transactions of 1 or 2 products, second bin of 3 or 4 products and so on.
+
+We can also inspect the frequencies of occurences of certain products. But then again, I will show only the top 30 items according to their importance, since plotting all 169 would be unreadable.
+
+```{r, warning=FALSE}
+itemFrequencyPlot(
+  groceries,
+  topN = 30,
+  type = "relative",
+  main = "Item frequency",
+  cex.names = 0.85
+) 
+```
+ 
+We can observe that whole milk is the most frequent choice for customers. Next 4 positions also seem to stand out a bit from the rest, which lacks any significant drops of frequency among the products. The product of my choice is shown on the histogram in two variants: bottled beer and canned beer. To be sure there aren't any other variants I will look for unique values of products containing the word "beer". 
+
+```{r, warning=FALSE}
+uniques <- groceries@itemInfo[["labels"]]
+uniques[str_detect(uniques, "beer")]
+```
+
+As we can see there are only exactly two products describing beer, so we can be sure now that no beer-related item will be omitted.
+
+***
+
+# Association rules
+
+## General rules 
+
+Firstly we need to create the rules in our dataset using the Apriori algorithm. Each of the rules' quality can be measured with 3 measures, which are support, confidence and lift. More on each measure will be in the following subchapters. The apriori algorithm has default minimum values of rules' support and confidence (0.1 and 0.8, respectively) which are too high for our dataset. No rules were found, thus we should lower the tresholds of minimum support and confidence.
+
+```{r, warning=FALSE}
+rules <- apriori(groceries, parameter = list(supp = 0.01, conf = 0.45)) 
+```
+
+Total of 31 rules were found and that number can be taken into further analysis, although the parameters had to be set to be relatively low to initial values. 
+
+### Support
+
+Support is measure which tells us how many often a certain set of items appeared in the whole transaction set. In other words it's probability of appearance. From the 31 rules obtained the ones below are the top 6 according to support values.
+
+```{r, warning=FALSE, echo=T, results='hide'}
+rules_supp <- sort(rules, by = "support", decreasing = TRUE)
+rules_supp_dt <- inspect(head(rules_supp), linebreak = FALSE)
+```
+```{r}
+kable(rules_supp_dt, "html") %>% kable_styling("striped")
+```
+
+
+We can see that the rule with the highest support (almost 3%) is a one where a person buys domestic eggs and whole milk. It means that among the 9835 transactions 295 of them contained both domestic eggs and whole milk. All the transactions with high support values contain whole milk. All in all the most common combinations of products in the our dataset (given the parameters of Apriori algorithm) contained dairy products or vegetables.
+
+### Confidence
+
+Confidence describes how likely it is to have item B (rhs) in transaction given that item A (lhs) is in it already. It has maximum value of 1 and it is when customers *always* buy item B with item A.
+
+```{r, results='hide'}
+rules_conf <- sort(rules, by = "confidence", decreasing = TRUE)
+rules_conf_dt <- inspect(head(rules_conf), linebreak = FALSE)
+```
+```{r}
+kable(rules_conf_dt, "html") %>% kable_styling("striped") 
+```
+
+
+From the results we can gather that if a person bought citrus fruit and root vegetable he will buy other vegetables with the likelihood of roughly 59%. Overall, the confidence levels are not too high, but it may be caused by the fact that there are many unique products, hence many combinations of them. Again most of the top confidence rules contain whole milk, which suggests that milk is bought regardless of what other products are bought. 
+
+### Lift
+
+Lift can be seen as a measure of correlation of sorts. It tells us how much more likely it is that items A and B will be bought together than when they are assumed to be unrelated. Values of lift < 1 mean that products are more likely to be bought separately than together and lift > 1 means that products are more likely to be bought together. Lift = 1 means there is no difference.
+
+```{r, warning=FALSE, echo=T, results='hide'}
+rules_lift <- sort(rules, by = "lift", decreasing = TRUE)
+rules_lift_dt <- inspect(head(rules_lift), linebreak = FALSE)
+```
+```{r, results=T}
+kable(rules_lift_dt, "html") %>% kable_styling("striped")
+```
+
+We can see that the highest value of lift is a little above 3. It implies that other vegetables appeared three times more often in transactionss with citrus fruit and root vegetables than separately. All of the rules with highest lifts contain other vegetables as rhs. What we can infer from that is that "other vegetables" are more likely to be bought with other products (lhs list) than if they were independent. It seems that people don't go shopping to buy vegetables only.
+
+## Beer rules
+
+Since we have a general overview of rules in our set, we can try to find the ones of interest (bottled beer and canned beer). We have to lower both support and confidence values for the algorithm, due to generally lower number of transactions containing beer. The goal was to obtain approximately 5 rules for each type of package. Eventually, given exact same levels of confidence (0.175) and different support levels we obtained 6 rules each.
+
+### Bottled beer
+
+```{r, warning=FALSE, echo=T, results='hide'}
+rules_bbeer <-
+  apriori(
+    data = groceries,
+    parameter = list(supp = 0.002, conf = 0.175),
+    appearance = list(default = "lhs", rhs = "bottled beer"),
+    control = list(verbose = F)
+  )
+rules_bbeer_dt <- inspect(rules_bbeer, linebreak = FALSE)
+```
+```{r}
+kable(rules_bbeer_dt, "html") %>% kable_styling("striped") 
+```
+
+We can see that the rule with highest confidence and really high lift is the one that connects bottled beer to liquors. Lift of 5 means that liquors and bottled beer have 5-times the chance of being bought together than independently. It is pretty self explanatory, since most people don't drink much alcohol on a daily basis and such transactions are made probably for parties or some group gatherings.Two biggest values of support (rule no.4 and no.5) show that beer is also frequently bought with other liquids, such as water, soda or milk. The only food shown in those rules are vegetables, which also is quite peculiar. One would expect someone to buy beer along with some meat for grilling for example.  
+
+Beneath we can see a plot mapping the rules onto a 2D plane, where more clearly we can see that rule no.1 stands out from the rest.
+
+```{r, warning=FALSE}
+plotly_arules(rules_bbeer)
+plot(rules_bbeer, method="grouped")
+```
+
+***
+
+### Canned beer
+
+```{r, warning=FALSE, echo=T, results='hide'}
+rules_cbeer <-
+  apriori(
+    data = groceries,
+    parameter = list(supp = 0.001, conf = 0.175),
+    appearance = list(default = "lhs", rhs = "canned beer"),
+    control = list(verbose = F)
+  )
+rules_cbeer_dt <- inspect(rules_cbeer, linebreak = FALSE)
+```
+```{r}
+kable(rules_cbeer_dt, "html") %>% kable_styling("striped")
+```
+
+As we can clearly see, canned beer is generally less popular among customers, support levels of rules are lower. Similarly to bottled beer it is bought often enough with other liquors to have it's own rule, but it isn't leading in any of the measures this time. Highest support goes to rule no.3, which contains also coffee and soda, so perhaps canned beer is treated more like a "everyday drink", than bottled beer. This may also be connected to the fact that 4 out of 6 rules contain food, compared to 1 in previous calculations. Not only it is more common it is somehow, more often associated with beer. Sausages, buns, sodas and canned beer form a pretty popular trio for homemade barbecues or bonfires.
+
+On the plot below we can see that the sausage, buns and canned beer bundle rules are the ones with highest confidence and lift, a little smaller values again for liquors.
+
+```{r, warning=FALSE}
+plotly_arules(rules_cbeer)
+plot(rules_cbeer, method="grouped") 
+```
+
+***
+
+# Summary
+
+Generally speaking, association rules regarding bottled and canned beer proved to be plausible. Bottled beer was bought the most with other liquors or drinks, while canned beer was associated more with food. It leads me to believe that there might be a distinction between them, i.e. bottled beer being "party beer", whereas canned beer being more of a "barbecue/bonfire beer". 
+
+Whatever the distinctions, shopkeepers could obviously benefit from having such knowledge. They could either bundle the products according to the generated rules. They could give discounts on product A, when you have product B in your shopping cart. Or even something as simple and low-cost as rearranging the shelves in the shop so that beer is near to liquors (it's like this already, well done shopkeepers) or move the barbecue equipment/necessities toward the beer shelves. Such subliminal messages to the customers' minds would probably increase the number of sold products by eliminating "lazy" customers who don't want to go to another aisle for something they remembered just now, while looking at this certain shelf.
+
+
